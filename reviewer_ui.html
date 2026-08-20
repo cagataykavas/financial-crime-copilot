@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Financial Crime Copilot</title>
+  <style>
+    :root{
+      --bg:#0b1020;--panel:#111a2f;--panel2:#17233d;--line:#273553;--text:#f7fbff;--muted:#91a2bd;
+      --cyan:#4fd1c5;--purple:#8b5cf6;--amber:#fbbf24;--red:#fb7185;--green:#34d399;
+      font-family:Inter,ui-sans-serif,system-ui,sans-serif;color-scheme:dark
+    }
+    *{box-sizing:border-box}body{margin:0;background:linear-gradient(145deg,#07101f,#10182b 48%,#0b1020);color:var(--text);min-height:100vh}
+    .layout{display:grid;grid-template-columns:240px 1fr;min-height:100vh}.sidebar{border-right:1px solid var(--line);background:rgba(7,13,26,.86);padding:24px 16px}.brand{font-size:20px;font-weight:900;letter-spacing:-.04em;padding:4px 8px 24px}.brand span{color:var(--cyan)}
+    .nav{display:grid;gap:5px}.nav button{border:0;background:transparent;color:var(--muted);text-align:left;padding:11px 12px;border-radius:11px}.nav button.active{background:rgba(79,209,197,.08);color:var(--text)}
+    .sidebar .footer{position:sticky;top:calc(100vh - 150px);margin-top:50px;border-top:1px solid var(--line);padding-top:18px;font-size:12px;color:var(--muted);line-height:1.6}
+    main{padding:26px}.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}.top h1{font-size:28px;margin:0;letter-spacing:-.04em}.top p{margin:6px 0 0;color:var(--muted)}.status{background:rgba(251,113,133,.11);color:#fda4af;border:1px solid rgba(251,113,133,.22);padding:8px 11px;border-radius:999px;font-size:12px;font-weight:800}
+    .grid{display:grid;grid-template-columns:1.25fr .85fr;gap:18px;margin-top:22px}.card{background:linear-gradient(160deg,rgba(255,255,255,.045),rgba(255,255,255,.018));border:1px solid var(--line);border-radius:18px;padding:18px}.card h2,.card h3{margin:0}.sub{color:var(--muted);font-size:13px;margin-top:5px;line-height:1.6}
+    .hero{display:grid;grid-template-columns:1fr 160px;gap:20px;align-items:center}.priority{display:grid;place-items:center;border-left:1px solid var(--line);min-height:120px}.priority strong{font-size:44px}.priority span{color:var(--muted);font-size:12px}.reco{font-size:25px;font-weight:900;margin:12px 0 8px;letter-spacing:-.03em}.reco small{font-size:12px;color:#ffd17a;display:block;text-transform:uppercase;letter-spacing:.12em;margin-bottom:7px}
+    .signals{display:grid;gap:10px;margin-top:14px}.signal{display:grid;grid-template-columns:1fr auto;gap:12px;padding:13px;border:1px solid var(--line);border-radius:13px;background:rgba(255,255,255,.02)}.signal strong{font-size:14px}.signal p{color:var(--muted);font-size:12px;margin:5px 0 0;line-height:1.5}.badge{align-self:start;font-size:11px;font-weight:900;padding:5px 8px;border-radius:999px}.high{background:rgba(251,113,133,.13);color:#fda4af}.medium{background:rgba(251,191,36,.13);color:#fde68a}
+    .timeline{display:grid;gap:10px;margin-top:14px}.event{display:grid;grid-template-columns:15px 1fr;gap:11px}.event i{width:10px;height:10px;border-radius:50%;background:var(--cyan);margin-top:5px;box-shadow:0 0 0 5px rgba(79,209,197,.08)}.event strong{font-size:13px}.event p{font-size:12px;color:var(--muted);margin:4px 0 0;line-height:1.5}
+    .explain{padding:14px;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.18);border-radius:14px;margin-top:13px;font-size:13px;line-height:1.65}.explain b{color:#c4b5fd}
+    .actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:14px}.actions button{padding:12px;border-radius:11px;border:1px solid var(--line);font-weight:800;cursor:pointer}.primary{grid-column:1/-1;background:var(--cyan);color:#07221f;border:0!important}.secondary{background:rgba(255,255,255,.03);color:var(--text)}.danger{background:rgba(251,113,133,.08);color:#fda4af}
+    .audit{margin-top:14px;padding:12px;border:1px dashed var(--line);border-radius:12px;color:var(--muted);font-size:11px;line-height:1.6}.legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}.legend span{font-size:11px;color:var(--muted)}
+    @media(max-width:920px){.layout{display:block}.sidebar{display:none}.grid{grid-template-columns:1fr}.hero{grid-template-columns:1fr}.priority{border:0;border-top:1px solid var(--line);padding-top:15px}.actions{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">FC<span>Copilot</span></div>
+    <div class="nav"><button class="active">Review queue · 18</button><button>High priority · 6</button><button>Evidence requests · 4</button><button>Resolved today · 73</button><button>Audit explorer</button><button>Experiment metrics</button></div>
+    <div class="footer">Synthetic portfolio prototype.<br>No real customer or bank data.</div>
+  </aside>
+  <main>
+    <div class="top"><div><h1>Case FC-DEMO-20418</h1><p>Retail subject · opened 8 minutes ago · SLA remaining 17m</p></div><div class="status">High-impact review</div></div>
+    <div class="grid">
+      <section>
+        <div class="card hero">
+          <div><div class="reco"><small>Copilot recommendation</small>Escalate to specialist review</div><div class="sub">Three synthetic signals combine into a high-priority case. The copilot proposes escalation but cannot auto-execute the disposition.</div><div class="legend"><span>Evidence coverage: 100%</span><span>Contradictions: 0</span><span>Top signal: 0.86</span></div></div>
+          <div class="priority"><div><strong>92</strong><span> / 100 priority</span></div></div>
+        </div>
+        <div class="card" style="margin-top:18px"><h3>Why this case was escalated</h3><div class="signals">
+          <div class="signal"><div><strong>Transaction velocity</strong><p>Five outbound transfers occurred within 18 minutes, materially above the synthetic account baseline.</p></div><span class="badge high">HIGH · 0.86</span></div>
+          <div class="signal"><div><strong>New counterparty burst</strong><p>Three counterparties were first observed within the current review window.</p></div><span class="badge medium">MEDIUM · 0.72</span></div>
+          <div class="signal"><div><strong>Profile / activity mismatch</strong><p>Observed transfer intensity differs from the synthetic historical profile.</p></div><span class="badge medium">MEDIUM · 0.69</span></div>
+        </div></div>
+        <div class="card" style="margin-top:18px"><h3>Evidence timeline</h3><div class="timeline">
+          <div class="event"><i></i><div><strong>14:03 · transaction stream</strong><p>First outbound transfer in synthetic sequence.</p></div></div>
+          <div class="event"><i></i><div><strong>14:11 · graph feature update</strong><p>Second newly observed counterparty added.</p></div></div>
+          <div class="event"><i></i><div><strong>14:18 · velocity rule triggered</strong><p>Window exceeded demo velocity threshold; case assembled.</p></div></div>
+          <div class="event"><i></i><div><strong>14:19 · copilot summary created</strong><p>Evidence IDs tx-001, net-001 and profile-001 linked to recommendation.</p></div></div>
+        </div></div>
+      </section>
+      <aside>
+        <div class="card"><h3>Reviewer decision</h3><p class="sub">The reviewer sees the AI recommendation, supporting evidence and uncertainty before acting.</p><div class="explain"><b>Copilot narrative:</b> transaction velocity is the strongest signal. New counterparties and profile mismatch add context. No evidence item is currently marked contradictory.</div><div class="actions"><button class="primary" onclick="record('escalate')">Accept escalation</button><button class="secondary" onclick="record('request_information')">Request information</button><button class="danger" onclick="record('override_close')">Override & close</button></div><div class="audit" id="audit">No reviewer action recorded yet.</div></div>
+        <div class="card" style="margin-top:18px"><h3>Guardrails</h3><p class="sub">• Material disposition requires human authorization.<br>• Evidence IDs remain visible.<br>• Override requires a reason.<br>• Recommendation and final decision are stored separately.<br>• Synthetic demo rules are not presented as production AML logic.</p></div>
+      </aside>
+    </div>
+  </main>
+</div>
+<script>
+function record(action){
+  const event={case_id:'FC-DEMO-20418',agent_recommendation:'escalate',reviewer_action:action,reviewer:'demo-reviewer',timestamp:new Date().toISOString()};
+  document.getElementById('audit').textContent='Audit preview · '+JSON.stringify(event);
+}
+</script>
+</body>
+</html>
