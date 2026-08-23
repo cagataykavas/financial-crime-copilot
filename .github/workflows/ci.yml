@@ -8,12 +8,21 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
+      FC_DATABASE_PATH: /tmp/financial_crime_ci.db
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pytest ruff
-      - run: ruff check copilot.py tests
+      - run: pip install -e ".[dev]"
+      - run: ruff check copilot.py service tests
       - run: pytest -q
       - run: python copilot.py
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t financial-crime-copilot:ci .
