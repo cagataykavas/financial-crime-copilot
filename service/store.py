@@ -7,8 +7,14 @@ from collections.abc import Iterable
 from dataclasses import asdict
 from pathlib import Path
 
-from copilot import Action, Evidence, EvidenceKind, FinancialCrimeCase, Severity, Signal
-
+from copilot import (
+    Action,
+    Evidence,
+    EvidenceKind,
+    FinancialCrimeCase,
+    Severity,
+    Signal,
+)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS cases (
