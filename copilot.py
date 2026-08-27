@@ -112,6 +112,8 @@ class CasePrioritizer:
         score += min(15, case.contradictory_evidence_count * 6)
         if any(signal.severity is Severity.CRITICAL for signal in case.signals):
             score += 18
+        elif any(signal.severity is Severity.HIGH for signal in case.signals):
+            score += 5
         if case.sla_minutes <= 15:
             score += 12
         elif case.sla_minutes <= 30:
