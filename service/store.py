@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import threading
 from collections.abc import Iterable
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from copilot import (
@@ -34,6 +35,16 @@ CREATE TABLE IF NOT EXISTS decision_audit (
 CREATE INDEX IF NOT EXISTS idx_decision_audit_case_id ON decision_audit(case_id);
 """
 
+GENESIS_AUDIT_HASH = "0" * 64
+
+
+@dataclass(frozen=True)
+class AuditVerification:
+    valid: bool
+    entries: int
+    head_hash: str
+    failure_index: int | None = None
+
 
 def _evidence_from_dict(row: dict) -> Evidence:
     return Evidence(
@@ -58,6 +69,23 @@ def _signal_from_dict(row: dict) -> Signal:
         evidence_ids=tuple(row.get("evidence_ids", [])),
         deterministic=bool(row.get("deterministic", True)),
     )
+
+
+def _audit_hash(event: dict[str, object], previous_hash: str) -> str:
+    canonical = json.dumps(
+        {"event": event, "previous_hash": previous_hash},
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _chain_event(event: dict[str, object], previous_hash: str) -> dict[str, object]:
+    payload = dict(event)
+    payload["previous_hash"] = previous_hash
+    payload["event_hash"] = _audit_hash(event, previous_hash)
+    return payload
 
 
 def case_to_dict(case: FinancialCrimeCase) -> dict:
@@ -95,7 +123,7 @@ def case_from_dict(payload: dict) -> FinancialCrimeCase:
 
 
 class CaseRepository:
-    """SQLite-backed repository used by the demo API."""
+    """SQLite-backed repository with a tamper-evident reviewer audit chain."""
 
     def __init__(self, database_path: str | Path = "financial_crime.db") -> None:
         self.database_path = str(database_path)
@@ -153,13 +181,31 @@ class CaseRepository:
         events = case.audit_events[known_count:]
         if not events:
             return
+
         with self._lock, self._connect() as connection:
+            last_row = connection.execute(
+                "SELECT event_json FROM decision_audit WHERE case_id = ? ORDER BY id DESC LIMIT 1",
+                (case.case_id,),
+            ).fetchone()
+            if last_row is None:
+                previous_hash = GENESIS_AUDIT_HASH
+            else:
+                last_event = json.loads(last_row["event_json"])
+                previous_hash = str(last_event.get("event_hash", GENESIS_AUDIT_HASH))
+
+            rows: list[tuple[str, str]] = []
+            for event in events:
+                chained = _chain_event(event, previous_hash)
+                previous_hash = str(chained["event_hash"])
+                rows.append(
+                    (
+                        case.case_id,
+                        json.dumps(chained, sort_keys=True, separators=(",", ":"), default=str),
+                    )
+                )
             connection.executemany(
                 "INSERT INTO decision_audit(case_id, event_json) VALUES (?, ?)",
-                [
-                    (case.case_id, json.dumps(event, sort_keys=True, default=str))
-                    for event in events
-                ],
+                rows,
             )
 
     def audit(self, case_id: str) -> list[dict]:
@@ -169,6 +215,33 @@ class CaseRepository:
                 (case_id,),
             ).fetchall()
         return [json.loads(row["event_json"]) for row in rows]
+
+    def verify_audit_chain(self, case_id: str) -> AuditVerification:
+        events = self.audit(case_id)
+        previous_hash = GENESIS_AUDIT_HASH
+        for index, stored in enumerate(events):
+            claimed_previous = stored.get("previous_hash")
+            claimed_hash = stored.get("event_hash")
+            event = {
+                key: value
+                for key, value in stored.items()
+                if key not in {"previous_hash", "event_hash"}
+            }
+            expected_hash = _audit_hash(event, previous_hash)
+            if claimed_previous != previous_hash or claimed_hash != expected_hash:
+                return AuditVerification(
+                    valid=False,
+                    entries=len(events),
+                    head_hash=previous_hash,
+                    failure_index=index,
+                )
+            previous_hash = str(claimed_hash)
+
+        return AuditVerification(
+            valid=True,
+            entries=len(events),
+            head_hash=previous_hash,
+        )
 
     def seed(self, cases: Iterable[FinancialCrimeCase]) -> None:
         for case in cases:
