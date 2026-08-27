@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import os
 from dataclasses import asdict
 from pathlib import Path
-import os
 
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
