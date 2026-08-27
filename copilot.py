@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from statistics import mean
-from typing import Iterable
+from typing import ClassVar
 
 
 class Severity(str, Enum):
@@ -97,7 +98,7 @@ class CopilotRecommendation:
 
 
 class CasePrioritizer:
-    WEIGHTS = {
+    WEIGHTS: ClassVar[dict[Severity, int]] = {
         Severity.LOW: 8,
         Severity.MEDIUM: 18,
         Severity.HIGH: 32,
@@ -179,9 +180,11 @@ class Copilot:
             missing.append("customer_profile_context")
         if EvidenceKind.TRANSACTION not in evidence_kinds:
             missing.append("transaction_context")
-        if any(signal.name == "geographic_inconsistency" for signal in top):
-            if EvidenceKind.GEO not in evidence_kinds:
-                missing.append("geographic_context")
+        if (
+            any(signal.name == "geographic_inconsistency" for signal in top)
+            and EvidenceKind.GEO not in evidence_kinds
+        ):
+            missing.append("geographic_context")
 
         uncertainty: list[str] = []
         if case.contradictory_evidence_count:
@@ -251,7 +254,7 @@ class Copilot:
         case.status = "resolved"
         case.audit_events.append(
             {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "case_id": case.case_id,
                 "reviewer_id": reviewer_id,
                 "agent_recommendation": recommendation.recommended_action.value,
@@ -305,7 +308,7 @@ def evaluate_reviews(
 
 
 def synthetic_case() -> FinancialCrimeCase:
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     evidence = [
         Evidence(
             evidence_id="tx-001",
