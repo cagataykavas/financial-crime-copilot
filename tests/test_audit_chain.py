@@ -5,7 +5,7 @@ import sqlite3
 from pathlib import Path
 
 from copilot import Action, Copilot, synthetic_case
-from service.store import CaseRepository, GENESIS_AUDIT_HASH
+from service.store import GENESIS_AUDIT_HASH, CaseRepository
 
 
 def _reviewed_case():
