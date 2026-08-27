@@ -43,6 +43,12 @@ def test_end_to_end_review_flow(tmp_path: Path) -> None:
     assert audit.status_code == 200
     assert len(audit.json()) == 1
     assert audit.json()[0]["reviewer_id"] == "reviewer-test"
+    assert len(audit.json()[0]["event_hash"]) == 64
+
+    verification = client.get(f"/cases/{case_id}/audit/verify")
+    assert verification.status_code == 200
+    assert verification.json()["valid"] is True
+    assert verification.json()["entries"] == 1
 
 
 def test_duplicate_decision_is_rejected(tmp_path: Path) -> None:
