@@ -21,6 +21,11 @@ def test_end_to_end_review_flow(tmp_path: Path) -> None:
     assert recommendation.status_code == 200
     assert recommendation.json()["recommended_action"] == "escalate"
 
+    policy = client.get(f"/cases/{case_id}/policy")
+    assert policy.status_code == 200
+    assert policy.json()["outcome"] == "require_human"
+    assert "material_disposition_requires_human_authorization" in policy.json()["reasons"]
+
     decision = client.post(
         f"/cases/{case_id}/decision",
         json={
@@ -32,6 +37,7 @@ def test_end_to_end_review_flow(tmp_path: Path) -> None:
     assert decision.status_code == 200
     assert decision.json()["override"] is False
     assert decision.json()["case"]["status"] == "resolved"
+    assert decision.json()["policy"]["outcome"] == "require_human"
 
     audit = client.get(f"/cases/{case_id}/audit")
     assert audit.status_code == 200
