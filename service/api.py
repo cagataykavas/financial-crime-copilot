@@ -118,3 +118,10 @@ def audit(case_id: str) -> list[dict]:
     if repository.get(case_id) is None:
         raise HTTPException(status_code=404, detail="case not found")
     return repository.audit(case_id)
+
+
+@app.get("/cases/{case_id}/audit/verify")
+def verify_audit(case_id: str) -> dict:
+    if repository.get(case_id) is None:
+        raise HTTPException(status_code=404, detail="case not found")
+    return asdict(repository.verify_audit_chain(case_id))
