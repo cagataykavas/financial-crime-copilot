@@ -1,20 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import asdict
-from pathlib import Path
 import json
 import sqlite3
 import threading
-from typing import Iterable
+from collections.abc import Iterable
+from dataclasses import asdict
+from pathlib import Path
 
-from copilot import (
-    Action,
-    Evidence,
-    EvidenceKind,
-    FinancialCrimeCase,
-    Severity,
-    Signal,
-)
+from copilot import Action, Evidence, EvidenceKind, FinancialCrimeCase, Severity, Signal
 
 
 SCHEMA = """
@@ -96,11 +89,7 @@ def case_from_dict(payload: dict) -> FinancialCrimeCase:
 
 
 class CaseRepository:
-    """SQLite-backed repository used by the demo API.
-
-    The domain model stays storage-agnostic; swapping this adapter for PostgreSQL
-    does not require changing the recommendation policy.
-    """
+    """SQLite-backed repository used by the demo API."""
 
     def __init__(self, database_path: str | Path = "financial_crime.db") -> None:
         self.database_path = str(database_path)
