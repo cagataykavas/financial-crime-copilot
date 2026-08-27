@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from copilot import Action, Copilot, synthetic_case
+from governance import PolicyGate
 from service.store import CaseRepository, case_to_dict
 
 
@@ -20,12 +21,13 @@ class ReviewerDecisionRequest(BaseModel):
 DATABASE_PATH = Path(os.getenv("FC_DATABASE_PATH", "financial_crime.db"))
 repository = CaseRepository(DATABASE_PATH)
 copilot = Copilot()
+policy_gate = PolicyGate()
 app = FastAPI(
     title="Financial Crime Copilot",
-    version="0.2.0",
+    version="0.3.0",
     description=(
         "Synthetic human-in-the-loop financial-crime decision support API. "
-        "Material dispositions remain reviewer-authorized."
+        "Recommendation and execution authority are evaluated separately."
     ),
 )
 
@@ -75,6 +77,15 @@ def get_recommendation(case_id: str) -> dict:
     return asdict(copilot.recommend(case))
 
 
+@app.get("/cases/{case_id}/policy")
+def get_policy(case_id: str) -> dict:
+    case = repository.get(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="case not found")
+    recommendation = copilot.recommend(case)
+    return asdict(policy_gate.evaluate(case, recommendation))
+
+
 @app.post("/cases/{case_id}/decision")
 def reviewer_decision(case_id: str, request: ReviewerDecisionRequest) -> dict:
     case = repository.get(case_id)
@@ -97,6 +108,7 @@ def reviewer_decision(case_id: str, request: ReviewerDecisionRequest) -> dict:
     return {
         "case": case_to_dict(case),
         "recommendation": asdict(recommendation),
+        "policy": asdict(policy_gate.evaluate(case, recommendation)),
         "override": request.action != recommendation.recommended_action,
     }
 
