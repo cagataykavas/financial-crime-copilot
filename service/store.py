@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS cases (
     subject_id TEXT NOT NULL,
     status TEXT NOT NULL,
     payload TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -44,6 +45,16 @@ class AuditVerification:
     entries: int
     head_hash: str
     failure_index: int | None = None
+
+
+@dataclass(frozen=True)
+class CaseSnapshot:
+    case: FinancialCrimeCase
+    version: int
+
+
+class DecisionConflict(RuntimeError):
+    """The case changed or was resolved after a reviewer loaded it."""
 
 
 def _evidence_from_dict(row: dict) -> Evidence:
@@ -138,6 +149,14 @@ class CaseRepository:
     def _initialize(self) -> None:
         with self._connect() as connection:
             connection.executescript(SCHEMA)
+            columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(cases)").fetchall()
+            }
+            if "version" not in columns:
+                connection.execute(
+                    "ALTER TABLE cases ADD COLUMN version INTEGER NOT NULL DEFAULT 1"
+                )
 
     def upsert(self, case: FinancialCrimeCase) -> None:
         payload = json.dumps(case_to_dict(case), separators=(",", ":"), sort_keys=True)
@@ -150,23 +169,42 @@ class CaseRepository:
                     subject_id = excluded.subject_id,
                     status = excluded.status,
                     payload = excluded.payload,
+                    version = cases.version + 1,
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 (case.case_id, case.subject_id, case.status, payload),
             )
 
     def get(self, case_id: str) -> FinancialCrimeCase | None:
+        snapshot = self.get_snapshot(case_id)
+        return snapshot.case if snapshot is not None else None
+
+    def get_snapshot(self, case_id: str) -> CaseSnapshot | None:
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT payload FROM cases WHERE case_id = ?",
+                "SELECT payload, version FROM cases WHERE case_id = ?",
                 (case_id,),
             ).fetchone()
         if row is None:
             return None
-        return case_from_dict(json.loads(row["payload"]))
+        return CaseSnapshot(
+            case=case_from_dict(json.loads(row["payload"])),
+            version=int(row["version"]),
+        )
 
     def list(self, *, status: str | None = None, limit: int = 100) -> list[FinancialCrimeCase]:
-        query = "SELECT payload FROM cases"
+        return [
+            snapshot.case
+            for snapshot in self.list_snapshots(status=status, limit=limit)
+        ]
+
+    def list_snapshots(
+        self,
+        *,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[CaseSnapshot]:
+        query = "SELECT payload, version FROM cases"
         params: list[object] = []
         if status is not None:
             query += " WHERE status = ?"
@@ -175,7 +213,13 @@ class CaseRepository:
         params.append(max(1, min(limit, 500)))
         with self._connect() as connection:
             rows = connection.execute(query, params).fetchall()
-        return [case_from_dict(json.loads(row["payload"])) for row in rows]
+        return [
+            CaseSnapshot(
+                case=case_from_dict(json.loads(row["payload"])),
+                version=int(row["version"]),
+            )
+            for row in rows
+        ]
 
     def append_new_audit_events(self, case: FinancialCrimeCase, known_count: int) -> None:
         events = case.audit_events[known_count:]
@@ -207,6 +251,84 @@ class CaseRepository:
                 "INSERT INTO decision_audit(case_id, event_json) VALUES (?, ?)",
                 rows,
             )
+
+    def commit_review(
+        self,
+        case: FinancialCrimeCase,
+        *,
+        known_audit_count: int,
+        expected_version: int,
+    ) -> int:
+        """Atomically persist a final case decision and its new audit events.
+
+        ``BEGIN IMMEDIATE`` obtains SQLite's write reservation before reading the
+        current version. The conditional update protects the same invariant when
+        this reference implementation is later moved to a datastore with finer
+        grained write concurrency.
+        """
+        new_events = case.audit_events[known_audit_count:]
+        if not new_events:
+            raise ValueError("a review commit requires at least one audit event")
+        if case.status != "resolved" or case.reviewer_decision is None:
+            raise ValueError("a review commit requires a resolved reviewer decision")
+
+        payload = json.dumps(case_to_dict(case), separators=(",", ":"), sort_keys=True)
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current = connection.execute(
+                "SELECT status, version FROM cases WHERE case_id = ?",
+                (case.case_id,),
+            ).fetchone()
+            if current is None:
+                raise KeyError(case.case_id)
+            current_version = int(current["version"])
+            if current_version != expected_version or current["status"] != "open":
+                raise DecisionConflict(
+                    f"case changed: expected open version {expected_version}, "
+                    f"found {current['status']} version {current_version}"
+                )
+
+            previous_row = connection.execute(
+                "SELECT event_json FROM decision_audit "
+                "WHERE case_id = ? ORDER BY id DESC LIMIT 1",
+                (case.case_id,),
+            ).fetchone()
+            previous_hash = GENESIS_AUDIT_HASH
+            if previous_row is not None:
+                previous_hash = str(json.loads(previous_row["event_json"])["event_hash"])
+
+            chained_rows: list[tuple[str, str]] = []
+            for event in new_events:
+                chained = _chain_event(event, previous_hash)
+                previous_hash = str(chained["event_hash"])
+                chained_rows.append(
+                    (
+                        case.case_id,
+                        json.dumps(chained, sort_keys=True, separators=(",", ":"), default=str),
+                    )
+                )
+            connection.executemany(
+                "INSERT INTO decision_audit(case_id, event_json) VALUES (?, ?)",
+                chained_rows,
+            )
+            cursor = connection.execute(
+                """
+                UPDATE cases
+                SET subject_id = ?, status = ?, payload = ?,
+                    version = version + 1, updated_at = CURRENT_TIMESTAMP
+                WHERE case_id = ? AND version = ? AND status = 'open'
+                """,
+                (
+                    case.subject_id,
+                    case.status,
+                    payload,
+                    case.case_id,
+                    expected_version,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise DecisionConflict("case changed while the review was being committed")
+            return expected_version + 1
 
     def audit(self, case_id: str) -> list[dict]:
         with self._connect() as connection:

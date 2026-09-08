@@ -23,7 +23,9 @@ flowchart LR
     POLICY -- block --> HOLD[Integrity hold]
     REVIEW --> DECISION[Reviewer decision]
     AUTO --> DECISION
-    DECISION --> AUDIT[(SHA-256 chained audit log)]
+    DECISION --> TX[Atomic versioned commit]
+    TX --> AUDIT[(SHA-256 chained audit log)]
+    TX --> DB[(Case state)]
     AUDIT --> VERIFY[Audit verification]
 ```
 
@@ -111,6 +113,26 @@ A reviewer can agree with or override the copilot recommendation. The recorded a
 - timestamp.
 
 Duplicate final decisions are rejected after a case has been resolved.
+
+### Transactional review lifecycle
+
+Reviewer decisions use an optimistic case version. The API reads a case snapshot,
+returns its version to the reviewer, and accepts an optional `expected_version` with
+the decision command. The repository then starts an immediate write transaction and:
+
+1. verifies that the case is still open at the expected version;
+2. chains and inserts the reviewer audit event;
+3. writes the resolved case and increments its version;
+4. commits both changes together.
+
+If the version or state changed, the whole transaction rolls back with a conflict.
+Consequently, two reviewers who loaded the same open case cannot both resolve it, and
+an audit event cannot be committed without the matching case state.
+
+The concurrency regression test starts two real threads from the same snapshot and
+asserts exactly one successful decision, one conflict, one final audit entry and a
+valid hash chain. This is a SQLite reference implementation of the same invariant a
+production service would enforce with a conditional update or compare-and-swap.
 
 ### Tamper-evident audit chain
 
