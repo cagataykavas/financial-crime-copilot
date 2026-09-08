@@ -9,13 +9,14 @@ from pydantic import BaseModel, Field
 
 from copilot import Action, Copilot, synthetic_case
 from governance import PolicyGate
-from service.store import CaseRepository, case_to_dict
+from service.store import CaseRepository, DecisionConflict, case_to_dict
 
 
 class ReviewerDecisionRequest(BaseModel):
     action: Action
     reason: str = Field(min_length=5, max_length=1000)
     reviewer_id: str = Field(min_length=2, max_length=120)
+    expected_version: int | None = Field(default=None, ge=1)
 
 
 DATABASE_PATH = Path(os.getenv("FC_DATABASE_PATH", "financial_crime.db"))
@@ -24,7 +25,7 @@ copilot = Copilot()
 policy_gate = PolicyGate()
 app = FastAPI(
     title="Financial Crime Copilot",
-    version="0.3.0",
+    version="0.4.0",
     description=(
         "Synthetic human-in-the-loop financial-crime decision support API. "
         "Recommendation and execution authority are evaluated separately."
@@ -58,15 +59,18 @@ def list_cases(
     status: str | None = None,
     limit: int = Query(default=50, ge=1, le=500),
 ) -> list[dict]:
-    return [case_to_dict(case) for case in repository.list(status=status, limit=limit)]
+    return [
+        {**case_to_dict(snapshot.case), "version": snapshot.version}
+        for snapshot in repository.list_snapshots(status=status, limit=limit)
+    ]
 
 
 @app.get("/cases/{case_id}")
 def get_case(case_id: str) -> dict:
-    case = repository.get(case_id)
-    if case is None:
+    snapshot = repository.get_snapshot(case_id)
+    if snapshot is None:
         raise HTTPException(status_code=404, detail="case not found")
-    return case_to_dict(case)
+    return {**case_to_dict(snapshot.case), "version": snapshot.version}
 
 
 @app.get("/cases/{case_id}/recommendation")
@@ -88,11 +92,13 @@ def get_policy(case_id: str) -> dict:
 
 @app.post("/cases/{case_id}/decision")
 def reviewer_decision(case_id: str, request: ReviewerDecisionRequest) -> dict:
-    case = repository.get(case_id)
-    if case is None:
+    snapshot = repository.get_snapshot(case_id)
+    if snapshot is None:
         raise HTTPException(status_code=404, detail="case not found")
+    case = snapshot.case
     if case.status == "resolved":
         raise HTTPException(status_code=409, detail="case already resolved")
+    expected_version = request.expected_version or snapshot.version
 
     recommendation = copilot.recommend(case)
     known_audit_count = len(case.audit_events)
@@ -103,10 +109,16 @@ def reviewer_decision(case_id: str, request: ReviewerDecisionRequest) -> dict:
         reason=request.reason,
         reviewer_id=request.reviewer_id,
     )
-    repository.append_new_audit_events(case, known_audit_count)
-    repository.upsert(case)
+    try:
+        version = repository.commit_review(
+            case,
+            known_audit_count=known_audit_count,
+            expected_version=expected_version,
+        )
+    except DecisionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {
-        "case": case_to_dict(case),
+        "case": {**case_to_dict(case), "version": version},
         "recommendation": asdict(recommendation),
         "policy": asdict(policy_gate.evaluate(case, recommendation)),
         "override": request.action != recommendation.recommended_action,

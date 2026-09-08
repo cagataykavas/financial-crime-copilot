@@ -7,6 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY pyproject.toml ./
 COPY copilot.py ./
+COPY governance.py ./
 COPY service ./service
 RUN pip install --no-cache-dir .
 

@@ -16,6 +16,9 @@ def test_end_to_end_review_flow(tmp_path: Path) -> None:
     seeded = client.post("/demo/seed")
     assert seeded.status_code == 201
     case_id = seeded.json()["case_id"]
+    listed = client.get("/cases").json()
+    assert listed[0]["case_id"] == case_id
+    assert listed[0]["version"] == 1
 
     recommendation = client.get(f"/cases/{case_id}/recommendation")
     assert recommendation.status_code == 200
@@ -62,3 +65,25 @@ def test_duplicate_decision_is_rejected(tmp_path: Path) -> None:
     }
     assert client.post(f"/cases/{case_id}/decision", json=payload).status_code == 200
     assert client.post(f"/cases/{case_id}/decision", json=payload).status_code == 409
+
+
+def test_stale_explicit_case_version_is_rejected_without_audit(tmp_path: Path) -> None:
+    api_module.repository = CaseRepository(tmp_path / "stale.db")
+    client = TestClient(api_module.app)
+    case_id = client.post("/demo/seed").json()["case_id"]
+
+    response = client.post(
+        f"/cases/{case_id}/decision",
+        json={
+            "action": "escalate",
+            "reason": "This reviewer screen contains a stale case version.",
+            "reviewer_id": "reviewer-stale",
+            "expected_version": 99,
+        },
+    )
+
+    assert response.status_code == 409
+    assert client.get(f"/cases/{case_id}/audit").json() == []
+    current = client.get(f"/cases/{case_id}").json()
+    assert current["status"] == "open"
+    assert current["version"] == 1

@@ -25,7 +25,15 @@ jobs:
       - name: Domain demo smoke test
         run: python copilot.py
       - name: Packaged API and governance import smoke test
-        run: python -c "from service.api import app; from governance import PolicyGate; assert app.version == '0.3.0'; assert PolicyGate"
+        run: python -c "from service.api import app; from governance import PolicyGate; assert app.version == '0.4.0'; assert PolicyGate"
+      - name: Build wheel
+        run: python -m pip wheel . --no-deps --wheel-dir /tmp/dist
+      - name: Verify wheel outside source tree
+        run: |
+          python -m venv /tmp/wheelcheck
+          cd /tmp
+          /tmp/wheelcheck/bin/pip install /tmp/dist/*.whl
+          /tmp/wheelcheck/bin/python -c "from service.store import CaseRepository; from governance import PolicyGate; print(CaseRepository, PolicyGate)"
 
   container:
     runs-on: ubuntu-latest
@@ -33,3 +41,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build container
         run: docker build -t financial-crime-copilot:ci .
+      - name: Verify container application import
+        run: docker run --rm financial-crime-copilot:ci python -c "from service.api import app; print(app.title)"
