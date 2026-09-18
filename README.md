@@ -35,7 +35,7 @@ flowchart LR
 
 `copilot.py` defines explicit domain objects for:
 
-- evidence with source, confidence, timestamp and attributes;
+- evidence with source, confidence, timezone-aware event time and attributes;
 - deterministic/model-generated signals with evidence references;
 - financial-crime cases with SLA and customer-impact context;
 - structured recommendations with evidence IDs, missing information and uncertainty;
@@ -60,9 +60,14 @@ Material decisions are not silently auto-executed.
 - duplicate signal IDs;
 - signals referencing evidence that does not exist;
 - evidence confidence outside `[0, 1]`;
-- signal scores outside `[0, 1]`.
+- signal scores outside `[0, 1]`;
+- malformed or timezone-naive case/evidence timestamps;
+- evidence dated materially after the case opened;
+- stale evidence outside kind-specific freshness windows.
 
-Blocking provenance defects produce a `block` policy outcome rather than allowing a narrative to masquerade as trustworthy evidence.
+Blocking provenance defects produce a `block` policy outcome rather than allowing a narrative to masquerade as trustworthy evidence. Future-dated or unparseable evidence is blocking; stale evidence is retained for analyst context but downgrades otherwise automatic monitoring to human review.
+
+Freshness is evaluated point-in-time against `case.opened_at`, not wall-clock time, so replaying a historical case remains deterministic. Default windows are 30 days for transaction, network and rule evidence, 90 days for geographic evidence, and 365 days for profile and document evidence. A five-minute forward skew is tolerated for distributed ingestion clocks.
 
 ### Recommendation vs execution policy
 
