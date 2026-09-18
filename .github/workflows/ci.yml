@@ -25,7 +25,7 @@ jobs:
       - name: Domain demo smoke test
         run: python copilot.py
       - name: Packaged API and governance import smoke test
-        run: python -c "from service.api import app; from governance import PolicyGate; assert app.version == '0.4.0'; assert PolicyGate"
+        run: python -c "from service.api import app; from governance import PolicyGate; assert app.version == '0.5.0'; assert PolicyGate"
       - name: Build wheel
         run: python -m pip wheel . --no-deps --wheel-dir /tmp/dist
       - name: Verify wheel outside source tree
