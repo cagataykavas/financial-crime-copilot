@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from copilot import (
     Action,
     Copilot,
@@ -110,3 +112,58 @@ def test_material_escalation_requires_human_policy() -> None:
     assert recommendation.recommended_action is Action.ESCALATE
     assert decision.outcome is PolicyOutcome.REQUIRE_HUMAN
     assert "material_disposition_requires_human_authorization" in decision.reasons
+
+
+def test_future_dated_evidence_blocks_execution() -> None:
+    case = _clean_monitoring_case()
+    case.evidence[0] = replace(
+        case.evidence[0],
+        event_time="2026-01-01T00:05:01+00:00",
+    )
+
+    decision = PolicyGate().evaluate(case, Copilot().recommend(case))
+
+    assert decision.outcome is PolicyOutcome.BLOCK
+    assert any(issue.code == "future_dated_evidence" for issue in decision.integrity_issues)
+
+
+def test_stale_evidence_requires_review_instead_of_auto_execution() -> None:
+    case = _clean_monitoring_case()
+    case.evidence[1] = replace(
+        case.evidence[1],
+        event_time="2024-12-31T23:59:59+00:00",
+    )
+
+    decision = PolicyGate().evaluate(case, Copilot().recommend(case))
+
+    assert decision.outcome is PolicyOutcome.REQUIRE_HUMAN
+    assert "evidence_freshness_requires_review" in decision.reasons
+    stale = [issue for issue in decision.integrity_issues if issue.code == "stale_evidence"]
+    assert len(stale) == 1
+    assert stale[0].blocking is False
+
+
+def test_invalid_or_naive_evidence_timestamp_blocks_execution() -> None:
+    for event_time in ("not-a-time", "2026-01-01T00:00:00"):
+        case = _clean_monitoring_case()
+        case.evidence[0] = replace(case.evidence[0], event_time=event_time)
+
+        decision = PolicyGate().evaluate(case, Copilot().recommend(case))
+
+        assert decision.outcome is PolicyOutcome.BLOCK
+        assert any(
+            issue.code == "invalid_evidence_event_time" for issue in decision.integrity_issues
+        )
+
+
+def test_freshness_boundary_and_timezone_offsets_are_normalized() -> None:
+    case = _clean_monitoring_case()
+    case.evidence[0] = replace(
+        case.evidence[0],
+        event_time="2025-12-02T03:00:00+03:00",
+    )
+
+    decision = PolicyGate().evaluate(case, Copilot().recommend(case))
+
+    assert decision.outcome is PolicyOutcome.ALLOW_AUTO
+    assert not any(issue.code == "stale_evidence" for issue in decision.integrity_issues)

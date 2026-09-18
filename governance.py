@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 
-from copilot import Action, CopilotRecommendation, FinancialCrimeCase
+from copilot import Action, CopilotRecommendation, EvidenceKind, FinancialCrimeCase
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,17 @@ class PolicyDecision:
     integrity_issues: tuple[IntegrityIssue, ...]
 
 
+MAX_EVIDENCE_AGE = {
+    EvidenceKind.TRANSACTION: timedelta(days=30),
+    EvidenceKind.PROFILE: timedelta(days=365),
+    EvidenceKind.NETWORK: timedelta(days=30),
+    EvidenceKind.GEO: timedelta(days=90),
+    EvidenceKind.DOCUMENT: timedelta(days=365),
+    EvidenceKind.RULE: timedelta(days=30),
+}
+FUTURE_CLOCK_SKEW = timedelta(minutes=5)
+
+
 MATERIAL_ACTIONS = {
     Action.CLOSE,
     Action.REQUEST_INFORMATION,
@@ -46,6 +58,16 @@ def _duplicates(values: list[str]) -> set[str]:
     return duplicates
 
 
+def _parse_timestamp(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(UTC)
+
+
 def validate_case_integrity(case: FinancialCrimeCase) -> tuple[IntegrityIssue, ...]:
     """Validate the provenance graph before a recommendation can drive execution."""
     issues: list[IntegrityIssue] = []
@@ -53,6 +75,15 @@ def validate_case_integrity(case: FinancialCrimeCase) -> tuple[IntegrityIssue, .
     evidence_ids = [item.evidence_id for item in case.evidence]
     signal_ids = [item.signal_id for item in case.signals]
     known_evidence = set(evidence_ids)
+
+    case_opened_at = _parse_timestamp(case.opened_at)
+    if case_opened_at is None:
+        issues.append(
+            IntegrityIssue(
+                code="invalid_case_opened_at",
+                detail="case opened_at must be an ISO-8601 timestamp with a timezone",
+            )
+        )
 
     for evidence_id in sorted(_duplicates(evidence_ids)):
         issues.append(
@@ -71,6 +102,40 @@ def validate_case_integrity(case: FinancialCrimeCase) -> tuple[IntegrityIssue, .
         )
 
     for evidence in case.evidence:
+        event_time = _parse_timestamp(evidence.event_time)
+        if event_time is None:
+            issues.append(
+                IntegrityIssue(
+                    code="invalid_evidence_event_time",
+                    detail=(
+                        f"evidence {evidence.evidence_id} event_time must be "
+                        "an ISO-8601 timestamp with a timezone"
+                    ),
+                )
+            )
+        elif case_opened_at is not None:
+            if event_time > case_opened_at + FUTURE_CLOCK_SKEW:
+                issues.append(
+                    IntegrityIssue(
+                        code="future_dated_evidence",
+                        detail=(
+                            f"evidence {evidence.evidence_id} occurs after case opening "
+                            "beyond the allowed clock skew"
+                        ),
+                    )
+                )
+            elif case_opened_at - event_time > MAX_EVIDENCE_AGE[evidence.kind]:
+                issues.append(
+                    IntegrityIssue(
+                        code="stale_evidence",
+                        detail=(
+                            f"evidence {evidence.evidence_id} exceeds the "
+                            f"{MAX_EVIDENCE_AGE[evidence.kind].days}-day freshness window"
+                        ),
+                        blocking=False,
+                    )
+                )
+
         if not 0.0 <= evidence.confidence <= 1.0:
             issues.append(
                 IntegrityIssue(
@@ -143,6 +208,8 @@ class PolicyGate:
             reasons.append("uncertainty_requires_review")
         if case.contradictory_evidence_count:
             reasons.append("contradictory_evidence_requires_review")
+        if any(issue.code == "stale_evidence" for issue in issues):
+            reasons.append("evidence_freshness_requires_review")
 
         if reasons:
             return PolicyDecision(
