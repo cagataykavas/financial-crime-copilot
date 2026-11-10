@@ -64,6 +64,19 @@ Material decisions are not silently auto-executed.
 
 Blocking provenance defects produce a `block` policy outcome rather than allowing a narrative to masquerade as trustworthy evidence.
 
+### Recommendation lineage gate
+
+The execution policy independently validates the copilot output instead of trusting a
+well-formed recommendation object. It binds the recommendation to the exact case, requires
+bounded text and identifiers, rejects unknown or duplicate signal/evidence references, and
+requires the cited evidence set to exactly cover the selected signals. A recommendation cannot
+claim automatic authority for a material action. These failures block before the normal
+human-versus-automation policy is evaluated.
+
+This is structural evidence tracing, not factual verification of an evidence item or a generated
+narrative. A future narrative model still needs claim-level evaluation and an authenticated model
+and prompt provenance record.
+
 ### Recommendation vs execution policy
 
 `PolicyGate` is intentionally separate from `Copilot.recommend()`.
