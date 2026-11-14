@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from copilot import Action, CopilotRecommendation, FinancialCrimeCase
+from untrusted_context import audit_untrusted_evidence
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,19 @@ def validate_case_integrity(case: FinancialCrimeCase) -> tuple[IntegrityIssue, .
                     ),
                 )
             )
+        for finding in audit_untrusted_evidence(
+            summary=evidence.summary,
+            attributes=evidence.attributes,
+        ):
+            issues.append(
+                IntegrityIssue(
+                    code=finding.code,
+                    detail=(
+                        f"evidence {evidence.evidence_id} failed untrusted-context audit "
+                        f"at {finding.field_path} ({finding.rule})"
+                    ),
+                )
+            )
 
     for signal in case.signals:
         if not 0.0 <= signal.score <= 1.0:
@@ -88,8 +102,7 @@ def validate_case_integrity(case: FinancialCrimeCase) -> tuple[IntegrityIssue, .
                 IntegrityIssue(
                     code="invalid_signal_score",
                     detail=(
-                        f"signal {signal.signal_id} score must be within [0, 1], "
-                        f"got {signal.score}"
+                        f"signal {signal.signal_id} score must be within [0, 1], got {signal.score}"
                     ),
                 )
             )
@@ -99,8 +112,7 @@ def validate_case_integrity(case: FinancialCrimeCase) -> tuple[IntegrityIssue, .
                     IntegrityIssue(
                         code="missing_signal_evidence",
                         detail=(
-                            f"signal {signal.signal_id} references missing evidence "
-                            f"{evidence_id}"
+                            f"signal {signal.signal_id} references missing evidence {evidence_id}"
                         ),
                     )
                 )

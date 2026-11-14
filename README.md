@@ -64,6 +64,26 @@ Material decisions are not silently auto-executed.
 
 Blocking provenance defects produce a `block` policy outcome rather than allowing a narrative to masquerade as trustworthy evidence.
 
+### Untrusted evidence admission
+
+Evidence summaries and nested string attributes are treated as attacker-controlled data before
+they can cross a future LLM or agent boundary. `untrusted_context.py` performs a deterministic,
+bounded audit that:
+
+- normalizes Unicode and removes format controls before matching prompt-control shapes;
+- catches instruction overrides, privileged-role markers, secret-extraction requests, tool-use
+  directives and prompt-boundary markers;
+- rejects bidirectional display controls that can make reviewer-visible text differ from its
+  logical order;
+- caps field size, total text, traversal depth and node count to bound worst-case work;
+- reports only evidence ID, field path and rule name, never the attacker-supplied text.
+
+Findings are blocking case-integrity failures, so `PolicyGate` cannot admit even a low-impact
+automatic action when case evidence contains a detected control payload. This is a narrow
+defense-in-depth signal, not a semantic prompt-injection proof: production systems should also
+isolate retrieved data structurally, minimize model/tool privileges, constrain outputs, and
+monitor model behavior.
+
 ### Recommendation vs execution policy
 
 `PolicyGate` is intentionally separate from `Copilot.recommend()`.
@@ -159,7 +179,8 @@ event 2 + event_hash_1 → event_hash_2
 ```text
 financial-crime-copilot/
 ├── copilot.py               # domain model + recommendation/prioritization
-├── governance.py            # provenance validation + execution policy
+├── governance.py            # provenance/context validation + execution policy
+├── untrusted_context.py     # bounded prompt-control and Unicode audit
 ├── service/
 │   ├── api.py               # FastAPI review service
 │   └── store.py             # SQLite repository + audit hash chain
@@ -167,7 +188,8 @@ financial-crime-copilot/
 │   ├── test_api.py          # HTTP review flow + policy + audit verification
 │   ├── test_audit_chain.py  # untampered vs tampered audit behavior
 │   ├── test_copilot.py      # recommendation / reviewer behavior
-│   └── test_governance.py   # evidence integrity + policy boundaries
+│   ├── test_governance.py   # evidence integrity + policy boundaries
+│   └── test_untrusted_context.py # untrusted evidence admission
 ├── reviewer_ui.html
 ├── Dockerfile
 ├── pyproject.toml
@@ -212,4 +234,4 @@ The model boundary is deliberately narrow. Evidence IDs, provenance validation, 
 
 ## Portfolio signal
 
-**Agentic AI · Human-in-the-loop · FinTech · Financial Crime · Evidence Provenance · Policy Gates · FastAPI · Auditability · Responsible Automation**
+**LLM/RAG Security · Agentic AI · Human-in-the-loop · FinTech · Evidence Provenance · Policy Gates · FastAPI · Auditability · Responsible Automation**

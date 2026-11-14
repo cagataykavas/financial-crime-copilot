@@ -25,7 +25,7 @@ copilot = Copilot()
 policy_gate = PolicyGate()
 app = FastAPI(
     title="Financial Crime Copilot",
-    version="0.4.0",
+    version="0.5.0",
     description=(
         "Synthetic human-in-the-loop financial-crime decision support API. "
         "Recommendation and execution authority are evaluated separately."
