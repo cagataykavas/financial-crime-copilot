@@ -64,6 +64,23 @@ Material decisions are not silently auto-executed.
 
 Blocking provenance defects produce a `block` policy outcome rather than allowing a narrative to masquerade as trustworthy evidence.
 
+### Typed claim-conflict audit
+
+Evidence can carry structured claims with a subject, predicate, scalar value and effective time.
+Before policy evaluation, `contradiction_audit.py` compares only well-formed, high-confidence,
+time-aligned claims. A material conflict requires different values from at least two independent
+sources; matching values, low-confidence claims, different effective times and disagreements from
+one source do not trigger the gate.
+
+Malformed claim metadata blocks policy evaluation. Detected conflicts force human review and emit
+bounded, deterministic evidence containing source/value counts and content hashes rather than raw
+subjects or values. This removes reliance on the upstream `contradictory` flag while preserving it
+for compatibility.
+
+The audit detects exact structured disagreements, not semantic contradiction in free text. Source
+independence and confidence remain upstream assertions, and matching effective timestamps do not
+prove the underlying observations were collected under identical conditions.
+
 ### Recommendation vs execution policy
 
 `PolicyGate` is intentionally separate from `Copilot.recommend()`.
@@ -159,6 +176,7 @@ event 2 + event_hash_1 → event_hash_2
 ```text
 financial-crime-copilot/
 ├── copilot.py               # domain model + recommendation/prioritization
+├── contradiction_audit.py   # privacy-reduced structured claim conflict gate
 ├── governance.py            # provenance validation + execution policy
 ├── service/
 │   ├── api.py               # FastAPI review service
