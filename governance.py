@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from contradiction_audit import (
+    ClaimConflictFinding,
+    ClaimConflictReport,
+    audit_claim_conflicts,
+)
 from copilot import Action, CopilotRecommendation, FinancialCrimeCase
 
 
@@ -26,6 +31,7 @@ class PolicyDecision:
     outcome: PolicyOutcome
     reasons: tuple[str, ...]
     integrity_issues: tuple[IntegrityIssue, ...]
+    claim_conflicts: tuple[ClaimConflictFinding, ...]
 
 
 MATERIAL_ACTIONS = {
@@ -46,7 +52,11 @@ def _duplicates(values: list[str]) -> set[str]:
     return duplicates
 
 
-def validate_case_integrity(case: FinancialCrimeCase) -> tuple[IntegrityIssue, ...]:
+def validate_case_integrity(
+    case: FinancialCrimeCase,
+    *,
+    claim_audit: ClaimConflictReport | None = None,
+) -> tuple[IntegrityIssue, ...]:
     """Validate the provenance graph before a recommendation can drive execution."""
     issues: list[IntegrityIssue] = []
 
@@ -105,6 +115,14 @@ def validate_case_integrity(case: FinancialCrimeCase) -> tuple[IntegrityIssue, .
                     )
                 )
 
+    active_claim_audit = claim_audit or audit_claim_conflicts(case)
+    for issue in active_claim_audit.issues:
+        location = ":".join(
+            item for item in (issue.evidence_id, issue.claim_id) if item is not None
+        )
+        detail = issue.code if not location else f"{issue.code}: {location}"
+        issues.append(IntegrityIssue(code=issue.code, detail=detail))
+
     return tuple(issues)
 
 
@@ -121,7 +139,8 @@ class PolicyGate:
         case: FinancialCrimeCase,
         recommendation: CopilotRecommendation,
     ) -> PolicyDecision:
-        issues = validate_case_integrity(case)
+        claim_audit = audit_claim_conflicts(case)
+        issues = validate_case_integrity(case, claim_audit=claim_audit)
         blocking = tuple(issue for issue in issues if issue.blocking)
         if blocking:
             return PolicyDecision(
@@ -130,6 +149,7 @@ class PolicyGate:
                 outcome=PolicyOutcome.BLOCK,
                 reasons=("case_integrity_failed",),
                 integrity_issues=issues,
+                claim_conflicts=claim_audit.findings,
             )
 
         reasons: list[str] = []
@@ -143,6 +163,8 @@ class PolicyGate:
             reasons.append("uncertainty_requires_review")
         if case.contradictory_evidence_count:
             reasons.append("contradictory_evidence_requires_review")
+        if claim_audit.findings:
+            reasons.append("conflicting_claims_require_review")
 
         if reasons:
             return PolicyDecision(
@@ -151,6 +173,7 @@ class PolicyGate:
                 outcome=PolicyOutcome.REQUIRE_HUMAN,
                 reasons=tuple(dict.fromkeys(reasons)),
                 integrity_issues=issues,
+                claim_conflicts=claim_audit.findings,
             )
 
         return PolicyDecision(
@@ -159,4 +182,5 @@ class PolicyGate:
             outcome=PolicyOutcome.ALLOW_AUTO,
             reasons=("low_impact_monitoring_action_with_complete_evidence",),
             integrity_issues=issues,
+            claim_conflicts=(),
         )

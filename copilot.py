@@ -33,6 +33,15 @@ class Action(str, Enum):
 
 
 @dataclass(frozen=True)
+class EvidenceClaim:
+    claim_id: str
+    subject_id: str
+    predicate: str
+    value: str | int | bool
+    effective_at: str
+
+
+@dataclass(frozen=True)
 class Evidence:
     evidence_id: str
     kind: EvidenceKind
@@ -42,6 +51,7 @@ class Evidence:
     event_time: str
     contradictory: bool = False
     attributes: dict[str, object] = field(default_factory=dict)
+    claims: tuple[EvidenceClaim, ...] = ()
 
 
 @dataclass(frozen=True)
